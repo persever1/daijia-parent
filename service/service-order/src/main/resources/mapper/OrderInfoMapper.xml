@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//ibatis.apache.org//DTD Mapper 3.0//EN"
+"http://ibatis.apache.org/dtd/ibatis-3-mapper.dtd">
+
+
+<mapper namespace="com.atguigu.daijia.order.mapper.OrderInfoMapper">
+    <!--
+   查询客户的代驾订单分页列表
+
+   说明：
+   - 本SQL查询属于客户的代驾订单信息
+   - 使用了左连接来确保即使没有计费记录，客户的订单信息也能被查询到
+   - 条件筛选包括客户的ID和订单未被逻辑删除的条件
+   - 查询结果按照订单创建时间降序排序，确保最新的订单排在前面
+
+   参数:
+   - customerId: 客户的ID，用于筛选特定客户的订单
+
+   结果类型:
+   - com.atguigu.daijia.model.vo.order.OrderListVo: 返回的结果类型，表示订单列表的视图对象
+   -->
+    <select id="selectCustomerOrderPage" resultType="com.atguigu.daijia.model.vo.order.OrderListVo">
+        select
+            info.id,
+            info.order_no,
+            info.start_location,
+            info.end_location,
+            if(info.status &lt; 7, info.expect_amount, bill.pay_amount) as amount,
+            info.status,
+            info.create_time
+        from order_info info
+                 left join order_bill bill on bill.order_id = info.id
+        where info.customer_id = #{customerId}
+          and info.is_deleted = 0
+        order by info.create_time desc
+    </select>
+    <!--
+   查询司机的订单分页列表
+
+   说明：
+   - 该SQL查询指定司机的订单信息，并按照创建时间倒序排列。
+   - 仅查询未被逻辑删除（is_deleted = 0）的订单。
+   - 使用resultType指定返回值类型为OrderListVo，该类型映射了SQL查询结果的结构。
+
+   参数：
+   - driverId: 司机ID，用于筛选指定司机的订单。
+
+   返回值：
+   - 返回类型为com.atguigu.daijia.model.vo.order.OrderListVo，包含订单的相关信息。
+
+   SQL字段说明：
+   - id: 订单ID
+   - order_no: 订单编号
+   - start_location: 起始地点
+   - end_location: 终点地点
+   - pay_amount: 实际支付金额，原字段名为real_amount
+   - amount: 根据订单状态决定的金额，如果状态小于7则为期望金额，否则为实际支付金额
+   - status: 订单状态
+   - create_time: 创建时间
+
+   数据表：
+   - order_info: 存储订单信息的数据表
+
+   条件：
+   - driver_id = #{driverId}: 仅查询指定司机的订单
+   - is_deleted = 0: 仅查询未被逻辑删除的订单
+
+   排序：
+   - create_time desc: 按照创建时间倒序排列订单
+   -->
+    <select id="selectDriverOrderPage" resultType="com.atguigu.daijia.model.vo.order.OrderListVo">
+        select
+            id,
+            order_no,
+            start_location,
+            end_location,
+            real_amount as pay_amount,
+            if(status &lt; 7, expect_amount, real_amount) as amount,
+            status,
+            create_time
+        from order_info
+        where driver_id = #{driverId}
+          and is_deleted = 0
+        order by create_time desc
+    </select>
+    <!--
+   selectOrderPayVo：根据客户ID和订单编号查询订单支付信息
+
+   说明：
+   - 该SQL查询语句用于从数据库中检索特定订单的支付相关信息。
+   - 它通过客户ID和订单编号进行筛选，确保返回的信息是特定用户和订单的数据。
+   - 结果类型指定为OrderPayVo，这通常是一个封装了订单相关信息的视图对象，用于展示或其他业务逻辑处理。
+
+   参数:
+   - customerId: 客户的唯一标识符，用于定位数据库中的特定客户记录。
+   - orderNo: 订单编号，与客户ID一起用于精确查找对应的订单信息。
+
+   返回值:
+   - 返回一个OrderPayVo对象，包含订单的各种支付相关的信息，如订单ID、客户ID、司机ID、订单号、起始位置、结束位置、状态、支付金额和优惠券金额。
+   -->
+    <select id="selectOrderPayVo" resultType="com.atguigu.daijia.model.vo.order.OrderPayVo">
+        select
+            info.id as order_id,
+            info.customer_id,
+            info.driver_id,
+            info.order_no,
+            info.start_location,
+            info.end_location,
+            info.status,
+            bill.pay_amount,
+            bill.coupon_amount
+        from order_info info
+                 inner join order_bill bill on bill.order_id = info.id
+        where info.customer_id = #{customerId}
+          and info.order_no = #{orderNo}
+    </select>
+</mapper>
+

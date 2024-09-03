@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//ibatis.apache.org//DTD Mapper 3.0//EN"
+"http://ibatis.apache.org/dtd/ibatis-3-mapper.dtd">
+
+
+<mapper namespace="com.atguigu.daijia.coupon.mapper.CouponInfoMapper">
+
+	<resultMap id="couponInfoMap" type="com.atguigu.daijia.model.entity.coupon.CouponInfo" autoMapping="true">
+	</resultMap>
+	
+	<!-- 用于select查询公用抽取的列 -->
+	<sql id="columns">
+		info.id,info.coupon_type,info.name,info.amount,info.discount,info.condition_amount,info.publish_count,info.per_limit,info.use_count,info.receive_count,info.expire_time,info.describe,info.status,info.create_time,info.update_time,info.is_deleted
+	</sql>
+	<!--
+	MyBatis 查询语句：查找未被用户领取的优惠券分页数据
+	该查询从coupon_info表中选择满足条件的优惠券信息，按id降序排列
+	使用#{customerId}作为参数占位符，以动态接收用户ID
+	结果类型指定为NoReceiveCouponVo，表示返回值类型为com.atguigu.daijia.model.vo.coupon.NoReceiveCouponVo
+	-->
+     <select id="findNoReceivePage" resultType="com.atguigu.daijia.model.vo.coupon.NoReceiveCouponVo">
+    	select
+			info.id,
+			info.coupon_type,
+			info.name,
+			info.amount,
+			info.discount,
+			info.condition_amount,
+			info.publish_count,
+			info.per_limit,
+			info.expire_time,
+			info.describe
+		from coupon_info info
+		where
+		    info.status = 1
+			and info.receive_count &lt; info.publish_count
+			and (
+			    info.per_limit =0 or info.per_limit &lt; (select count(1) from customer_coupon where customer_id = #{customerId})
+			)
+		order by info.id desc
+    </select>
+	<!--	/**-->
+	<!--	* 查询未使用的优惠券页面数据-->
+	<!--	* 通过连接查询从coupon_info表和customer_coupon表中获取优惠券信息和用户领取信息-->
+	<!--	* 仅查询未使用、未过期的优惠券-->
+	<!--	*-->
+	<!--	* @param customerId 用户ID，用于查询特定用户领取的优惠券-->
+	<!--	* @return 返回NoUseCouponVo类型结果，包含优惠券详细信息及用户领取时间-->
+	<!--	*/-->
+	<select id="findNoUsePage" resultType="com.atguigu.daijia.model.vo.coupon.NoUseCouponVo">
+		select
+			info.id,
+			info.coupon_type,
+			info.name,
+			info.amount,
+			info.discount,
+			info.condition_amount,
+			info.publish_count,
+			info.per_limit,
+			info.expire_time,
+			info.describe,
+
+			cstr.receive_time
+		from coupon_info info
+		inner join customer_coupon cstr on cstr.coupon_id = info.id
+		where
+		cstr.customer_id = #{customerId}
+		and cstr.status = 1
+		and cstr.expire_time > now()
+		order by cstr.id desc
+	</select>
+<!--	/**-->
+<!--	* 查询用户已使用的优惠券信息-->
+<!--	*-->
+<!--	* @param customerId 用户ID-->
+<!--	* @return com.atguigu.daijia.model.vo.coupon.UsedCouponVo 用户已使用的优惠券信息-->
+<!--	*/-->
+	<select id="findUsedPage" resultType="com.atguigu.daijia.model.vo.coupon.UsedCouponVo">
+		select
+			info.id,
+			info.coupon_type,
+			info.name,
+			info.amount,
+			info.discount,
+			info.condition_amount,
+			info.publish_count,
+			info.per_limit,
+			info.expire_time,
+			info.describe,
+
+			cstr.id as customerCouponId,
+			cstr.used_time
+		from coupon_info info
+		inner join customer_coupon cstr on cstr.coupon_id = info.id
+		where
+		cstr.customer_id = #{customerId}
+		and cstr.status = 2
+		order by cstr.id desc
+	</select>
+	<!-- 更新领取数量 -->
+	<update id="updateReceiveCount">
+		update coupon_info set receive_count = receive_count + 1 where id = #{id}
+	</update>
+	<!-- 更新领取数量的SQL语句 -->
+	<update id="updateReceiveCountByLimit">
+		update coupon_info set receive_count = receive_count + 1 where id = #{id} and receive_count &lt; publish_count
+	</update>
+	<!--
+    查询未使用的优惠券列表
+
+    通过连接 coupon_info 表和 customer_coupon 表，筛选出客户尚未使用的优惠券信息。
+    查询结果包括优惠券的基本信息以及客户领取该优惠券的相关信息。
+
+    参数:
+    - customerId: 客户ID，用于筛选特定客户的优惠券
+
+    返回值:
+    - resultType 指定返回值类型为 NoUseCouponVo，这是一个包含优惠券信息的视图对象
+
+    SQL 逻辑:
+    1. 从 coupon_info 表中选择所需字段
+    2. 内连接 customer_coupon 表，基于 coupon_id 字段关联
+    3. 使用 WHERE 子句筛选出特定客户的优惠券 (cstr.customer_id = #{customerId})
+    4. 仅选择状态为 1 的优惠券，表示未使用 (cstr.status = 1)
+    5. 确保优惠券的过期时间在当前时间之后 (cstr.expire_time > now())
+    6. 按客户领取优惠券的 ID 降序排序 (order by cstr.id desc)
+    -->
+	<select id="findNoUseList" resultType="com.atguigu.daijia.model.vo.coupon.NoUseCouponVo">
+		select
+			info.id,
+			info.coupon_type,
+			info.name,
+			info.amount,
+			info.discount,
+			info.condition_amount,
+			info.publish_count,
+			info.per_limit,
+			info.expire_time,
+			info.describe,
+
+			cstr.id as customerCouponId,
+			cstr.receive_time
+		from coupon_info info
+				 inner join customer_coupon cstr on cstr.coupon_id = info.id
+		where
+			cstr.customer_id = #{customerId}
+		  and cstr.status = 1
+		  and cstr.expire_time > now()
+		order by cstr.id desc
+	</select>
+	<!-- 更新指定ID的优惠券的使用次数 -->
+	<update id="updateUseCount">
+		update coupon_info set use_count = use_count + 1 where id = #{id}
+	</update>
+	<!--
+	查询未领取优惠券的分页SQL
+	通过筛选状态为“可领取”且领取数量小于发布数量的优惠券信息
+	如果优惠券设置为无领取限制，或者用户的实际领取数量小于优惠券的每人限领数量，则该优惠券将被包含在结果中
+	此查询旨在为前端提供分页显示的数据，以便用户查看他们还未领取的优惠券
+	-->
+	<select id="findNoReceivePage" resultType="com.atguigu.daijia.model.vo.coupon.NoReceiveCouponVo">
+		select
+			info.id,
+			info.coupon_type,
+			info.name,
+			info.amount,
+			info.discount,
+			info.condition_amount,
+			info.publish_count,
+			info.per_limit,
+			info.expire_time,
+			info.description
+		from coupon_info info
+				 left join (
+			select coupon_id, customer_id, count(customer_id) cnt  from customer_coupon where customer_id = #{customerId}  group by coupon_id, customer_id
+		) cus_coup on cus_coup.coupon_id = info.id
+		where
+			info.status = 1
+		  and info.receive_count &lt; info.publish_count
+		  and (
+			info.per_limit =0 or info.per_limit > cus_coup.cnt or cus_coup.cnt is null
+			)
+		order by info.id desc
+	</select>
+	<!--	/**-->
+	<!--	* 查询未使用的优惠券页面数据-->
+	<!--	* 通过此SQL查询顾客未使用的优惠券信息，包括优惠券的基本信息和顾客领取的时间-->
+	<!--	* 条件包括顾客ID、优惠券状态、以及优惠券未过期-->
+	<!--	*/-->
+	<select id="findNoUsePage" resultType="com.atguigu.daijia.model.vo.coupon.NoUseCouponVo">
+		select
+			info.id,
+			info.coupon_type,
+			info.name,
+			info.amount,
+			info.discount,
+			info.condition_amount,
+			info.publish_count,
+			info.per_limit,
+			info.expire_time,
+			info.description,
+
+			cstr.receive_time
+		from coupon_info info
+				 inner join customer_coupon cstr on cstr.coupon_id = info.id
+		where
+			cstr.customer_id = #{customerId}
+		  and cstr.status = 1
+		  and cstr.expire_time > now()
+		order by cstr.id desc
+	</select>
+	<!--	/**-->
+	<!--	* 查询用户已使用的优惠券页面数据-->
+	<!--	*-->
+	<!--	* @param customerId 用户ID-->
+	<!--	* @return 返回用户已使用的优惠券信息列表，类型为UsedCouponVo-->
+	<!--	*-->
+	<!--	* 该查询从coupon_info表和customer_coupon表中通过inner join连接获取数据，-->
+	<!--	* 仅选择status为2（表示已使用）的优惠券信息，-->
+	<!--	* 并按照customer_coupon表中的id降序排序。-->
+	<!--	*/-->
+	<select id="findUsedPage" resultType="com.atguigu.daijia.model.vo.coupon.UsedCouponVo">
+		select
+			info.id,
+			info.coupon_type,
+			info.name,
+			info.amount,
+			info.discount,
+			info.condition_amount,
+			info.publish_count,
+			info.per_limit,
+			info.expire_time,
+			info.description,
+
+			cstr.id as customerCouponId,
+			cstr.used_time
+		from coupon_info info
+				 inner join customer_coupon cstr on cstr.coupon_id = info.id
+		where
+			cstr.customer_id = #{customerId}
+		  and cstr.status = 2
+		order by cstr.id desc
+	</select>
+	<update id="updateReceiveCount">
+		update coupon_info set receive_count = receive_count + 1 where id = #{id}
+	</update>
+	<!-- 更新领取数量 -->
+	<update id="updateReceiveCount">
+		update coupon_info set receive_count = receive_count + 1 where id = #{id}
+	</update>
+	<!--
+	查询未使用的优惠券列表
+
+	通过连接 coupon_info 表和 customer_coupon 表，筛选出客户未使用的优惠券信息。
+	查询结果包括优惠券的基本信息和客户领取该优惠券的相关信息。
+
+	ResultType: com.atguigu.daijia.model.vo.coupon.NoUseCouponVo
+	-->
+	<select id="findNoUseList" resultType="com.atguigu.daijia.model.vo.coupon.NoUseCouponVo">
+		select
+			info.id,
+			info.coupon_type,
+			info.name,
+			info.amount,
+			info.discount,
+			info.condition_amount,
+			info.publish_count,
+			info.per_limit,
+			info.expire_time,
+			info.description,
+
+			cstr.id as customerCouponId,
+			cstr.receive_time
+		from coupon_info info
+				 inner join customer_coupon cstr on cstr.coupon_id = info.id
+		where
+			cstr.customer_id = #{customerId}
+		  and cstr.status = 1
+		  and cstr.expire_time > now()
+		order by cstr.id desc
+	</select>
+	<update id="updateUseCount">
+		update coupon_info set use_count = use_count + 1 where id = #{id}
+	</update>
+</mapper>
+
